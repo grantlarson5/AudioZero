@@ -9,7 +9,7 @@
  * An audio amplifier to connect to the DAC0 and ground
  * A speaker to connect to the audio amplifier
 
- 
+
  Arturo Guadalupi <a.guadalupi@arduino.cc>
  Angelo Scialabba <a.scialabba@arduino.cc>
  Claudio Indellicati <c.indellicati@arduino.cc>
@@ -20,8 +20,6 @@
 
 */
 
-#include <SD.h>
-#include <SPI.h>
 #include <AudioZero.h>
 
 void setup()
@@ -31,7 +29,7 @@ void setup()
 
   // setup SD-card
   Serial.print("Initializing SD card...");
-  if (!SD.begin(4)) {
+  if (!SD.begin(0)) {
     Serial.println(" failed!");
     while(true);
   }
@@ -54,8 +52,8 @@ void loop()
   }
 
   Serial.print("Playing");
-  
-  // until the file is not finished  
+
+  // until the file is not finished
   AudioZero.play(myFile);
 
   Serial.println("End of file. Thank you for listening!");

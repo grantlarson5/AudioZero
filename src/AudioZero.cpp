@@ -1,9 +1,9 @@
 /*
- * Copyright (c) 2015 by 
+ * Copyright (c) 2015 by
  Arturo Guadalupi <a.guadalupi@arduino.cc>
  Angelo Scialabba <a.scialabba@arduino.cc>
  Claudio Indellicati <c.indellicati@arduino.cc> <bitron.it@gmail.com>
- 
+
  * Audio library for Arduino Zero.
  *
  * This file is free software; you can redistribute it and/or modify
@@ -13,8 +13,6 @@
  */
 
 #include "AudioZero.h"
-#include <SD.h>
-#include <SPI.h>
 
 
 /*Global variables*/
@@ -27,23 +25,97 @@ uint8_t *__WavSamples;
 int __Volume;
 
 void AudioZeroClass::begin(uint32_t sampleRate) {
-	
+
 	__StartFlag = false;
 	__SampleIndex = 0;					//in order to start from the beginning
 	__NumberOfSamples = 1024;	//samples to read to have a buffer
-	
+
 	/*Allocate the buffer where the samples are stored*/
 	__WavSamples = (uint8_t *) malloc(__NumberOfSamples * sizeof(uint8_t));
-	
+
 	/*Modules configuration */
-  	dacConfigure();
+  dacConfigure();
 	tcConfigure(sampleRate);
 }
 
 void AudioZeroClass::end() {
 	tcDisable();
 	tcReset();
-	analogWrite(A0, 0);	
+	analogWrite(A0, 0);
+}
+
+bool AudioZeroClass::addClip(void) {
+
+	// Initialize flash
+	flash.begin();
+
+	// Erase the chip before beginning
+	if (!flash.eraseChip()) {
+		digitalWrite(LED_BUILTIN, HIGH);
+		while(1);
+	}
+
+	// Initialize UART serial
+	Serial.begin(9600);
+
+	uint32_t bytesRead = 0;
+	uint32_t addr;
+	uint32_t size = 0;
+	uint8_t data = 0;
+	state_t state = WAIT;
+
+	while(!done) {
+		switch (state) {
+			case WAIT:
+			{
+				if (Serial.available()) {
+					READ_FROM_SERIAL:
+				}
+				break;
+			}
+			case READ_FROM_SERIAL:
+			{
+				// Read a byte from USB serial
+				data = Serial.read();
+				bytesRead++;
+
+				if (bytesRead < 4) {
+					state = WAIT;
+				} else {
+					state = WRITE_TO_EEPROM;
+				}
+				break;
+			}
+			case WRITE_TO_EEPROM:
+			{
+				// Write the RX byte to external flash via SPI
+				if (flash.writeByte(addr,data)) {
+					addr++;
+					Serial.write(WRITE_EEPROM_SUCCESS);
+				} else {
+					Serial.write(WRITE_EEPROM_ERROR);
+					return false;
+				}
+
+				state = WAIT;
+				break;
+			}
+		}
+	}
+
+	return true;
+}
+
+void AudioZeroClass::removeClip(void) {
+
+}
+
+void AudioZeroClass::eepromWrite(void) {
+
+}
+
+void AudioZeroClass::eepromRead(uint8_t startAddr, uint8_t numBytes) {
+	// TODO - Identify max address on chip for error checking
 }
 
 /*void AudioZeroClass::prepare(int volume){
@@ -56,7 +128,7 @@ while (myFile.available()) {
     {
       myFile.read(__WavSamples, __NumberOfSamples);
       __HeadIndex = 0;
-	  
+
 	  /*once the buffer is filled for the first time the counter can be started*/
       tcStartCounter();
       __StartFlag = true;
@@ -64,10 +136,10 @@ while (myFile.available()) {
     else
     {
       uint32_t current__SampleIndex = __SampleIndex;
-      
+
       if (current__SampleIndex > __HeadIndex) {
         myFile.read(&__WavSamples[__HeadIndex], current__SampleIndex - __HeadIndex);
-        __HeadIndex = current__SampleIndex;        
+        __HeadIndex = current__SampleIndex;
       }
       else if (current__SampleIndex < __HeadIndex) {
         myFile.read(&__WavSamples[__HeadIndex], __NumberOfSamples-1 - __HeadIndex);
@@ -87,7 +159,7 @@ while (myFile.available()) {
  * channel mode configured for event triggered conversions.
  */
 void AudioZeroClass::dacConfigure(void){
-	analogWriteResolution(10);
+	analogWriteResolution(8); // FIXME - 10 may be correct
 	analogWrite(A0, 0);
 }
 
@@ -115,7 +187,7 @@ void AudioZeroClass::dacConfigure(void){
 
 	TC5->COUNT16.CC[0].reg = (uint16_t) (SystemCoreClock / sampleRate - 1);
 	while (tcIsSyncing());
-	
+
 	// Configure interrupt request
 	NVIC_DisableIRQ(TC5_IRQn);
 	NVIC_ClearPendingIRQ(TC5_IRQn);
@@ -125,7 +197,7 @@ void AudioZeroClass::dacConfigure(void){
 	// Enable the TC5 interrupt request
 	TC5->COUNT16.INTENSET.bit.MC0 = 1;
 	while (tcIsSyncing());
-}	
+}
 
 
 bool AudioZeroClass::tcIsSyncing()
